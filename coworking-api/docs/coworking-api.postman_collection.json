@@ -1,0 +1,869 @@
+{
+    "info": {
+        "name": "Coworking Management API",
+        "description": "Colección industrial 100% auditada. Refleja el estado exacto del sistema incluyendo blindajes de seguridad.\n\n**Staff vs Personas**: El Staff (ADMIN/OPERATOR) NUNCA recibe cupones (StaffGuard). Coupons = Solo Personas.\n**Triple-Lock**: Aforo atómico LUA + Lock Redis por documento + CAS Mongo.\n**Kill-Switch**: Desactivar operador invalida sus tokens de inmediato.\n\nSetup: `baseUrl`=http://localhost:3000, ejecutar Login Admin, copiar token.",
+        "_postman_id": "coworking-api-v2",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "variable": [
+        {
+            "key": "baseUrl",
+            "value": "http://localhost:3000",
+            "type": "string"
+        },
+        {
+            "key": "token",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "locationId",
+            "value": "0000000000000000000000a1",
+            "type": "string",
+            "description": "HQ El Poblado (seed fijo)"
+        },
+        {
+            "key": "operatorId",
+            "value": "",
+            "type": "string"
+        }
+    ],
+    "auth": {
+        "type": "bearer",
+        "bearer": [
+            {
+                "key": "token",
+                "value": "{{token}}",
+                "type": "string"
+            }
+        ]
+    },
+    "item": [
+        {
+            "name": "Health",
+            "item": [
+                {
+                    "name": "GET /health",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/health"
+                    },
+                    "response": [
+                        {
+                            "name": "200 - OK",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\"status\":\"ok\",\"uptime\":124.5}",
+                            "_postman_previewlanguage": "json"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Auth",
+            "description": "Rate limit: 5 req/min por IP. JWT firmado con issuer y audience validados.",
+            "item": [
+                {
+                    "name": "POST /auth/login (Admin)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": "{{baseUrl}}/auth/login",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"email\": \"admin@mail.com\",\n  \"password\": \"admin\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "200 - JWT Emitido",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"success\": true,\n  \"data\": {\n    \"user\": { \"id\": \"68001234abcd000000000001\", \"email\": \"admin@mail.com\", \"role\": \"ADMIN\" },\n    \"token\": \"eyJhbGciOiJIUzI1NiJ9...\"\n  }\n}",
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "name": "401 - Credenciales inválidas",
+                            "status": "Unauthorized",
+                            "code": 401,
+                            "body": "{\n  \"type\": \"https://coworking.api/errors/unauthorized\",\n  \"title\": \"No autorizado\",\n  \"status\": 401,\n  \"detail\": \"Credenciales inválidas\",\n  \"instance\": \"/auth/login\",\n  \"traceId\": \"abc-uuid\"\n}",
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "name": "401 - Cuenta INACTIVE",
+                            "status": "Unauthorized",
+                            "code": 401,
+                            "body": "{\n  \"type\": \"https://coworking.api/errors/unauthorized\",\n  \"title\": \"No autorizado\",\n  \"status\": 401,\n  \"detail\": \"Su cuenta ha sido desactivada para revisión.\",\n  \"instance\": \"/auth/login\",\n  \"traceId\": \"abc-uuid\"\n}",
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "name": "422 - Email malformado",
+                            "status": "Unprocessable Entity",
+                            "code": 422,
+                            "body": "{\n  \"type\": \"https://coworking.api/errors/validation\",\n  \"title\": \"Hay campos con errores\",\n  \"status\": 422,\n  \"detail\": \"El formato de los datos es inválido o faltan campos obligatorios.\",\n  \"instance\": \"/auth/login\",\n  \"traceId\": \"abc-uuid\"\n}",
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "name": "429 - Rate Limit",
+                            "status": "Too Many Requests",
+                            "code": 429,
+                            "body": "{\n  \"type\": \"https://coworking.api/errors/rate-limit\",\n  \"title\": \"Demasiadas solicitudes\",\n  \"status\": 429,\n  \"detail\": \"Demasiados intentos de login. Espera 1 minuto.\",\n  \"instance\": \"/auth/login\",\n  \"traceId\": \"abc-uuid\"\n}",
+                            "_postman_previewlanguage": "json"
+                        }
+                    ]
+                },
+                {
+                    "name": "POST /auth/login (Operator)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": "{{baseUrl}}/auth/login",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"email\": \"carlos.villa@coworking.co\",\n  \"password\": \"operator123\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "200 - JWT Operador",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"success\": true,\n  \"data\": {\n    \"user\": { \"id\": \"68001234abcd000000000002\", \"email\": \"carlos.villa@coworking.co\", \"role\": \"OPERATOR\" },\n    \"token\": \"eyJhbGciOiJIUzI1NiJ9...\"\n  }\n}",
+                            "_postman_previewlanguage": "json"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Locations",
+            "description": "Acceso restringido a ADMIN. La capacidad actual (currentCapacity) se sincroniza desde DragonflyDB.",
+            "item": [
+                {
+                    "name": "GET /locations",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/locations?page=1&limit=50"
+                    },
+                    "response": [
+                        {
+                            "name": "200 - Lista de Sedes",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"success\": true,\n  \"data\": [\n    {\n      \"_id\": \"0000000000000000000000a1\",\n      \"name\": \"HQ El Poblado\",\n      \"address\": \"Carrera 43A # 16A-40\",\n      \"maxCapacity\": 50,\n      \"pricePerHour\": 18000,\n      \"currentCapacity\": 12,\n      \"createdAt\": \"2026-01-01T00:00:00.000Z\"\n    }\n  ],\n  \"meta\": { \"total\": 5, \"page\": 1, \"limit\": 50, \"pages\": 1 }\n}",
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "name": "403 - Solo ADMIN",
+                            "status": "Forbidden",
+                            "code": 403,
+                            "body": "{\n  \"type\": \"https://coworking.api/errors/forbidden\",\n  \"title\": \"Acceso prohibido\",\n  \"status\": 403,\n  \"detail\": \"No tienes el rol necesario: ADMIN\",\n  \"instance\": \"/locations\",\n  \"traceId\": \"abc-uuid\"\n}",
+                            "_postman_previewlanguage": "json"
+                        }
+                    ]
+                },
+                {
+                    "name": "POST /locations (Crear Sede)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": "{{baseUrl}}/locations",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"name\": \"Coworking Premium Laureles\",\n  \"address\": \"Circular 4 # 72-10, Laureles\",\n  \"maxCapacity\": 40,\n  \"pricePerHour\": 16500\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "201 - Sede Creada",
+                            "status": "Created",
+                            "code": 201,
+                            "body": "{\n  \"success\": true,\n  \"data\": {\n    \"_id\": \"60b8d6f5e1d3c72a1c8b4567\",\n    \"name\": \"Coworking Premium Laureles\",\n    \"address\": \"Circular 4 # 72-10, Laureles\",\n    \"maxCapacity\": 40,\n    \"pricePerHour\": 16500,\n    \"createdAt\": \"2026-03-04T20:00:00.000Z\"\n  }\n}",
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "name": "409 - Nombre Duplicado",
+                            "status": "Conflict",
+                            "code": 409,
+                            "body": "{\n  \"type\": \"https://coworking.api/errors/conflict\",\n  \"title\": \"Conflicto de negocio\",\n  \"status\": 409,\n  \"detail\": \"Ya existe una sede con ese nombre\",\n  \"instance\": \"/locations\",\n  \"traceId\": \"abc-uuid\"\n}",
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "name": "422 - Datos inválidos",
+                            "status": "Unprocessable Entity",
+                            "code": 422,
+                            "body": "{\n  \"type\": \"https://coworking.api/errors/validation\",\n  \"title\": \"Hay campos con errores\",\n  \"status\": 422,\n  \"detail\": \"El formato de los datos es inválido o faltan campos obligatorios.\",\n  \"instance\": \"/locations\",\n  \"traceId\": \"abc-uuid\"\n}",
+                            "_postman_previewlanguage": "json"
+                        }
+                    ]
+                },
+                {
+                    "name": "PUT /locations/:id (Actualizar Sede)",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": "{{baseUrl}}/locations/{{locationId}}",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"pricePerHour\": 19000,\n  \"maxCapacity\": 55\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "200 - Sede Actualizada",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"success\": true,\n  \"data\": {\n    \"_id\": \"0000000000000000000000a1\",\n    \"name\": \"HQ El Poblado\",\n    \"pricePerHour\": 19000,\n    \"maxCapacity\": 55\n  }\n}",
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "name": "404 - Sede no encontrada",
+                            "status": "Not Found",
+                            "code": 404,
+                            "body": "{\n  \"type\": \"https://coworking.api/errors/not-found\",\n  \"title\": \"No encontramos ese recurso\",\n  \"status\": 404,\n  \"detail\": \"Sede no encontrada\",\n  \"instance\": \"/locations/000000000000000000000099\",\n  \"traceId\": \"abc-uuid\"\n}",
+                            "_postman_previewlanguage": "json"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Users (Operators)",
+            "description": "Gestión de Staff operativo. Solo ADMIN. El Kill-Switch invalida tokens activos vía DragonflyDB.",
+            "item": [
+                {
+                    "name": "GET /users/operators",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/users/operators?page=1&limit=50"
+                    },
+                    "response": [
+                        {
+                            "name": "200 - Lista Operadores",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"success\": true,\n  \"data\": [\n    {\n      \"_id\": \"68001234abcd000000000002\",\n      \"email\": \"carlos.villa@coworking.co\",\n      \"role\": \"OPERATOR\",\n      \"status\": \"ACTIVE\",\n      \"assignedLocations\": [\n        { \"_id\": \"0000000000000000000000a1\", \"name\": \"HQ El Poblado\", \"address\": \"Carrera 43A # 16A-40\" }\n      ]\n    }\n  ],\n  \"meta\": { \"total\": 4, \"page\": 1, \"limit\": 50 }\n}",
+                            "_postman_previewlanguage": "json"
+                        }
+                    ]
+                },
+                {
+                    "name": "POST /users/operators (Crear Operador)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": "{{baseUrl}}/users/operators",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"email\": \"nuevo.operador@coworking.co\",\n  \"password\": \"seguro2024\",\n  \"assignedLocations\": [\"{{locationId}}\"]\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "201 - Operador Creado",
+                            "status": "Created",
+                            "code": 201,
+                            "body": "{\n  \"success\": true,\n  \"data\": {\n    \"_id\": \"60b8d6f5e1d3c72a1c8b9999\",\n    \"email\": \"nuevo.operador@coworking.co\",\n    \"role\": \"OPERATOR\",\n    \"status\": \"ACTIVE\",\n    \"assignedLocations\": [\"0000000000000000000000a1\"]\n  }\n}",
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "name": "404 - Sede assignedLocations no existe",
+                            "status": "Not Found",
+                            "code": 404,
+                            "body": "{\n  \"type\": \"https://coworking.api/errors/not-found\",\n  \"title\": \"No encontramos ese recurso\",\n  \"status\": 404,\n  \"detail\": \"Una o más sedes en assignedLocations no existen\",\n  \"instance\": \"/users/operators\",\n  \"traceId\": \"abc-uuid\"\n}",
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "name": "409 - Email ya registrado",
+                            "status": "Conflict",
+                            "code": 409,
+                            "body": "{\n  \"type\": \"https://coworking.api/errors/conflict\",\n  \"title\": \"Conflicto de negocio\",\n  \"status\": 409,\n  \"detail\": \"Ya existe un usuario con ese email\",\n  \"instance\": \"/users/operators\",\n  \"traceId\": \"abc-uuid\"\n}",
+                            "_postman_previewlanguage": "json"
+                        }
+                    ]
+                },
+                {
+                    "name": "PUT /users/operators/:id/locations (Reasignar Sedes)",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": "{{baseUrl}}/users/operators/{{operatorId}}/locations",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"assignedLocations\": [\"0000000000000000000000a1\", \"0000000000000000000000a2\"]\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Reemplazo TOTAL de sedes asignadas. Array vacío = sin sedes."
+                    },
+                    "response": [
+                        {
+                            "name": "200 - Sedes Actualizadas",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"success\": true,\n  \"data\": {\n    \"_id\": \"...\",\n    \"email\": \"carlos.villa@coworking.co\",\n    \"assignedLocations\": [\"0000000000000000000000a1\", \"0000000000000000000000a2\"]\n  }\n}",
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "name": "404 - Operador no encontrado",
+                            "status": "Not Found",
+                            "code": 404,
+                            "body": "{\n  \"type\": \"https://coworking.api/errors/not-found\",\n  \"title\": \"No encontramos ese recurso\",\n  \"status\": 404,\n  \"detail\": \"Operador no encontrado\",\n  \"instance\": \"/users/operators/xxx/locations\",\n  \"traceId\": \"abc-uuid\"\n}",
+                            "_postman_previewlanguage": "json"
+                        }
+                    ]
+                },
+                {
+                    "name": "PATCH /users/operators/:id/status (Kill-Switch)",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": "{{baseUrl}}/users/operators/{{operatorId}}/status",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"status\": \"INACTIVE\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "INACTIVE escribe clave en DragonflyDB. Tokens existentes rechazados inmediatamente."
+                    },
+                    "response": [
+                        {
+                            "name": "200 - Estado Cambiado (Kill-Switch)",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"success\": true,\n  \"message\": \"Estado del operador actualizado a INACTIVE.\"\n}",
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "name": "200 - Reactivado",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"success\": true,\n  \"message\": \"Estado del operador actualizado a ACTIVE.\"\n}",
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "name": "404 - Operador no encontrado",
+                            "status": "Not Found",
+                            "code": 404,
+                            "body": "{\n  \"type\": \"https://coworking.api/errors/not-found\",\n  \"title\": \"No encontramos ese recurso\",\n  \"status\": 404,\n  \"detail\": \"Operador no encontrado\",\n  \"instance\": \"/users/operators/xxx/status\",\n  \"traceId\": \"abc-uuid\"\n}",
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "name": "422 - Status inválido",
+                            "status": "Unprocessable Entity",
+                            "code": 422,
+                            "body": "{\n  \"type\": \"https://coworking.api/errors/validation\",\n  \"title\": \"Hay campos con errores\",\n  \"status\": 422,\n  \"detail\": \"El formato de los datos es inválido o faltan campos obligatorios.\",\n  \"instance\": \"/users/operators/xxx/status\",\n  \"traceId\": \"abc-uuid\"\n}",
+                            "_postman_previewlanguage": "json"
+                        }
+                    ]
+                },
+                {
+                    "name": "DELETE /users/operators/:id (Eliminar Operador)",
+                    "request": {
+                        "method": "DELETE",
+                        "url": "{{baseUrl}}/users/operators/{{operatorId}}",
+                        "description": "Irreversible. Borra el usuario y escribe revocación en Dragonfly. Accesos históricos se conservan."
+                    },
+                    "response": [
+                        {
+                            "name": "200 - Eliminado e Invalidado",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"success\": true,\n  \"message\": \"Operador eliminado y sesiones invalidadas.\"\n}",
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "name": "404 - No encontrado (o es ADMIN)",
+                            "status": "Not Found",
+                            "code": 404,
+                            "body": "{\n  \"type\": \"https://coworking.api/errors/not-found\",\n  \"title\": \"No encontramos ese recurso\",\n  \"status\": 404,\n  \"detail\": \"Operador no encontrado\",\n  \"instance\": \"/users/operators/xxx\",\n  \"traceId\": \"abc-uuid\"\n}",
+                            "_postman_previewlanguage": "json"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Access (Check-In / Check-Out)",
+            "description": "Control de acceso físico. Concurrencia industrial: LUA atómico en Dragonfly para aforo + lock por documento.",
+            "item": [
+                {
+                    "name": "POST /access/in (Check-In Cliente)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": "{{baseUrl}}/access/in",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"document\": \"CC-71223344\",\n  \"name\": \"María González\",\n  \"email\": \"maria.gonzalez@empresa.com\",\n  \"locationId\": \"{{locationId}}\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "StaffGuard activo: si el email pertenece a un ADMIN u OPERATOR, la petición es rechazada con 403."
+                    },
+                    "response": [
+                        {
+                            "name": "200 - Ingreso Registrado",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"success\": true,\n  \"message\": \"Ingreso registrado correctamente\",\n  \"data\": {\n    \"access\": {\n      \"_id\": \"60b8d6f5e1d3c72a1c8baaaa\",\n      \"personId\": \"60b8d6f5e1d3c72a1c8bbbbb\",\n      \"locationId\": \"0000000000000000000000a1\",\n      \"checkIn\": \"2026-03-04T20:00:00.000Z\",\n      \"status\": \"ACTIVE\",\n      \"billingAmount\": 0,\n      \"priceAtCheckIn\": 18000,\n      \"operatorIn\": \"carlos.villa@coworking.co\"\n    },\n    \"availableCoupons\": []\n  }\n}",
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "name": "403 - Staff Rechazado (StaffGuard)",
+                            "status": "Forbidden",
+                            "code": 403,
+                            "body": "{\n  \"type\": \"https://coworking.api/errors/forbidden\",\n  \"title\": \"Acceso prohibido\",\n  \"status\": 403,\n  \"detail\": \"El personal no puede registrarse como cliente\",\n  \"instance\": \"/access/in\",\n  \"traceId\": \"abc-uuid\"\n}",
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "name": "403 - Operador sin acceso a la sede",
+                            "status": "Forbidden",
+                            "code": 403,
+                            "body": "{\n  \"type\": \"https://coworking.api/errors/forbidden\",\n  \"title\": \"Acceso prohibido\",\n  \"status\": 403,\n  \"detail\": \"No tienes permiso para operar en esta sede\",\n  \"instance\": \"/access/in\",\n  \"traceId\": \"abc-uuid\"\n}",
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "name": "404 - Sede no encontrada",
+                            "status": "Not Found",
+                            "code": 404,
+                            "body": "{\n  \"type\": \"https://coworking.api/errors/not-found\",\n  \"title\": \"No encontramos ese recurso\",\n  \"status\": 404,\n  \"detail\": \"Sede no encontrada\",\n  \"instance\": \"/access/in\",\n  \"traceId\": \"abc-uuid\"\n}",
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "name": "409 - Doble Check-In (lock activo)",
+                            "status": "Conflict",
+                            "code": 409,
+                            "body": "{\n  \"type\": \"https://coworking.api/errors/conflict\",\n  \"title\": \"Conflicto de negocio\",\n  \"status\": 409,\n  \"detail\": \"Esta persona ya tiene un ingreso activo en este u otro coworking\",\n  \"instance\": \"/access/in\",\n  \"traceId\": \"abc-uuid\"\n}",
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "name": "409 - Aforo Lleno",
+                            "status": "Conflict",
+                            "code": 409,
+                            "body": "{\n  \"type\": \"https://coworking.api/errors/conflict\",\n  \"title\": \"Conflicto de negocio\",\n  \"status\": 409,\n  \"detail\": \"La sede ha alcanzado su capacidad máxima\",\n  \"instance\": \"/access/in\",\n  \"traceId\": \"abc-uuid\"\n}",
+                            "_postman_previewlanguage": "json"
+                        }
+                    ]
+                },
+                {
+                    "name": "POST /access/out (Check-Out + Billing)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": "{{baseUrl}}/access/out",
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"document\": \"CC-71223344\",\n  \"locationId\": \"{{locationId}}\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "billingAmount = max(0.1h, duracionHoras) * priceAtCheckIn. Dispara proceso de fidelidad en background."
+                    },
+                    "response": [
+                        {
+                            "name": "200 - Salida y Billing calculado",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"success\": true,\n  \"message\": \"Salida registrada correctamente\",\n  \"data\": {\n    \"_id\": \"60b8d6f5e1d3c72a1c8baaaa\",\n    \"status\": \"COMPLETED\",\n    \"checkIn\": \"2026-03-04T18:00:00.000Z\",\n    \"checkOut\": \"2026-03-04T20:00:00.000Z\",\n    \"billingAmount\": 36000,\n    \"priceAtCheckIn\": 18000,\n    \"operatorOut\": \"carlos.villa@coworking.co\"\n  }\n}",
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "name": "404 - Sin ingreso activo en esta sede",
+                            "status": "Not Found",
+                            "code": 404,
+                            "body": "{\n  \"type\": \"https://coworking.api/errors/not-found\",\n  \"title\": \"No encontramos ese recurso\",\n  \"status\": 404,\n  \"detail\": \"No se encontró un ingreso activo para esta persona en esta sede\",\n  \"instance\": \"/access/out\",\n  \"traceId\": \"abc-uuid\"\n}",
+                            "_postman_previewlanguage": "json"
+                        }
+                    ]
+                },
+                {
+                    "name": "GET /access/active/:locationId (Personas en Sede)",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/access/active/{{locationId}}?page=1&limit=20"
+                    },
+                    "response": [
+                        {
+                            "name": "200 - Ocupación Actual",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"success\": true,\n  \"data\": [\n    {\n      \"_id\": \"60b8d6f5e1d3c72a1c8baaaa\",\n      \"personId\": {\n        \"document\": \"CC-XXXX3344\",\n        \"name\": \"María González\",\n        \"email\": \"m***@empresa.com\"\n      },\n      \"checkIn\": \"2026-03-04T18:00:00.000Z\",\n      \"priceAtCheckIn\": 18000,\n      \"operatorIn\": \"carlos.villa@coworking.co\"\n    }\n  ],\n  \"meta\": { \"total\": 1, \"page\": 1, \"limit\": 20 }\n}",
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "name": "403 - Operador sin acceso a esta sede",
+                            "status": "Forbidden",
+                            "code": 403,
+                            "body": "{\n  \"type\": \"https://coworking.api/errors/forbidden\",\n  \"title\": \"Acceso prohibido\",\n  \"status\": 403,\n  \"detail\": \"No tienes permiso para operar en esta sede\",\n  \"instance\": \"/access/active/xxx\",\n  \"traceId\": \"abc-uuid\"\n}",
+                            "_postman_previewlanguage": "json"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Coupons (Loyalty)",
+            "description": "Cupones de fidelidad por acumulación de horas (≥20h por sede). Rate limit: 30 req/min. Staff EXCLUIDO vía StaffGuard.",
+            "item": [
+                {
+                    "name": "GET /coupons (Listar)",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{baseUrl}}/coupons?status=VALID&locationId={{locationId}}&page=1&limit=50",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "coupons"
+                            ],
+                            "query": [
+                                {
+                                    "key": "status",
+                                    "value": "VALID",
+                                    "description": "VALID | USED | EXPIRED"
+                                },
+                                {
+                                    "key": "locationId",
+                                    "value": "{{locationId}}",
+                                    "description": "Filtrar por sede (ObjectId)"
+                                },
+                                {
+                                    "key": "personDocument",
+                                    "value": "",
+                                    "description": "Filtrar por documento de persona",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "page",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "limit",
+                                    "value": "50"
+                                }
+                            ]
+                        }
+                    },
+                    "response": [
+                        {
+                            "name": "200 - Cupones VALID",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"success\": true,\n  \"data\": [\n    {\n      \"_id\": \"60b8d6f5e1d3c72a1c8bcccc\",\n      \"code\": \"LOYALTY-5678-A1B2C3D4\",\n      \"personDocument\": \"CC-71223344\",\n      \"locationId\": \"0000000000000000000000a1\",\n      \"loyaltyBucket\": 1,\n      \"status\": \"VALID\",\n      \"issuedAt\": \"2026-03-01T10:00:00.000Z\",\n      \"expiresAt\": \"2026-03-31T10:00:00.000Z\"\n    }\n  ],\n  \"meta\": { \"total\": 1, \"page\": 1, \"limit\": 50 }\n}",
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "name": "403 - Operador accede sede ajena",
+                            "status": "Forbidden",
+                            "code": 403,
+                            "body": "{\n  \"type\": \"https://coworking.api/errors/forbidden\",\n  \"title\": \"Acceso prohibido\",\n  \"status\": 403,\n  \"detail\": \"No tienes permiso para consultar cupones de esta sede\",\n  \"instance\": \"/coupons\",\n  \"traceId\": \"abc-uuid\"\n}",
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "name": "422 - status inválido",
+                            "status": "Unprocessable Entity",
+                            "code": 422,
+                            "body": "{\n  \"type\": \"https://coworking.api/errors/validation\",\n  \"title\": \"Hay campos con errores\",\n  \"status\": 422,\n  \"detail\": \"El formato de los datos es inválido o faltan campos obligatorios.\",\n  \"instance\": \"/coupons\",\n  \"traceId\": \"abc-uuid\"\n}",
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "name": "429 - Rate Limit Cupones",
+                            "status": "Too Many Requests",
+                            "code": 429,
+                            "body": "{\n  \"type\": \"https://coworking.api/errors/rate-limit\",\n  \"title\": \"Demasiadas solicitudes\",\n  \"status\": 429,\n  \"detail\": \"Demasiadas peticiones al sistema de cupones. Espera 1 minuto.\",\n  \"instance\": \"/coupons\",\n  \"traceId\": \"abc-uuid\"\n}",
+                            "_postman_previewlanguage": "json"
+                        }
+                    ]
+                },
+                {
+                    "name": "PATCH /coupons/:code/redeem (Redimir)",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/coupons/:code/redeem",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "coupons",
+                                ":code",
+                                "redeem"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "code",
+                                    "value": "LOYALTY-5678-A1B2C3D4"
+                                }
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"locationId\": \"{{locationId}}\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Operación atómica CAS (findOneAndUpdate). La locationId debe coincidir con la sede de emisión del cupón."
+                    },
+                    "response": [
+                        {
+                            "name": "200 - Cupón Redimido",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"success\": true,\n  \"message\": \"Cupón redimido exitosamente\",\n  \"data\": {\n    \"_id\": \"60b8d6f5e1d3c72a1c8bcccc\",\n    \"code\": \"LOYALTY-5678-A1B2C3D4\",\n    \"status\": \"USED\",\n    \"redeemedAt\": \"2026-03-04T20:30:00.000Z\",\n    \"redeemedLocationId\": \"0000000000000000000000a1\"\n  }\n}",
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "name": "403 - Sede ajena al operador",
+                            "status": "Forbidden",
+                            "code": 403,
+                            "body": "{\n  \"type\": \"https://coworking.api/errors/forbidden\",\n  \"title\": \"Acceso prohibido\",\n  \"status\": 403,\n  \"detail\": \"No tienes permiso para redimir cupones de esta sede\",\n  \"instance\": \"/coupons/LOYALTY-5678-A1B2C3D4/redeem\",\n  \"traceId\": \"abc-uuid\"\n}",
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "name": "404 - Cupón no encontrado",
+                            "status": "Not Found",
+                            "code": 404,
+                            "body": "{\n  \"type\": \"https://coworking.api/errors/not-found\",\n  \"title\": \"No encontramos ese recurso\",\n  \"status\": 404,\n  \"detail\": \"Cupón no encontrado\",\n  \"instance\": \"/coupons/CODIGO-INEXISTENTE/redeem\",\n  \"traceId\": \"abc-uuid\"\n}",
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "name": "409 - Ya utilizado",
+                            "status": "Conflict",
+                            "code": 409,
+                            "body": "{\n  \"type\": \"https://coworking.api/errors/conflict\",\n  \"title\": \"Conflicto de negocio\",\n  \"status\": 409,\n  \"detail\": \"El cupón ya fue utilizado anteriormente\",\n  \"instance\": \"/coupons/LOYALTY-5678-A1B2C3D4/redeem\",\n  \"traceId\": \"abc-uuid\"\n}",
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "name": "409 - Cupón expirado",
+                            "status": "Conflict",
+                            "code": 409,
+                            "body": "{\n  \"type\": \"https://coworking.api/errors/conflict\",\n  \"title\": \"Conflicto de negocio\",\n  \"status\": 409,\n  \"detail\": \"El cupón ya expiró y no puede ser redimido\",\n  \"instance\": \"/coupons/LOYALTY-EXPIRED/redeem\",\n  \"traceId\": \"abc-uuid\"\n}",
+                            "_postman_previewlanguage": "json"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Analytics",
+            "description": "Indicadores operativos y financieros. PII Masking activo en documentos. Aislamiento multitenant por rol.",
+            "item": [
+                {
+                    "name": "GET /analytics/top-people (Global)",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/analytics/top-people"
+                    },
+                    "response": [
+                        {
+                            "name": "200 - Top 10",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"success\": true,\n  \"data\": [\n    { \"document\": \"CC-XXXX3344\", \"name\": \"María González\", \"totalEntries\": 23, \"totalHours\": 89.5 }\n  ]\n}",
+                            "_postman_previewlanguage": "json"
+                        }
+                    ]
+                },
+                {
+                    "name": "GET /analytics/top-people/location/:locationId (Por Sede)",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/analytics/top-people/location/{{locationId}}"
+                    },
+                    "response": [
+                        {
+                            "name": "200 - Top 10 en Sede",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"success\": true,\n  \"data\": [\n    { \"document\": \"CC-XXXX3344\", \"name\": \"María González\", \"totalEntries\": 12, \"totalHours\": 48.0 }\n  ]\n}",
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "name": "403 - Operador intenta sede ajena",
+                            "status": "Forbidden",
+                            "code": 403,
+                            "body": "{\n  \"type\": \"https://coworking.api/errors/forbidden\",\n  \"title\": \"Acceso prohibido\",\n  \"status\": 403,\n  \"detail\": \"No tienes permiso para consultar estadísticas de esta sede.\",\n  \"instance\": \"/analytics/top-people/location/xxx\",\n  \"traceId\": \"abc-uuid\"\n}",
+                            "_postman_previewlanguage": "json"
+                        }
+                    ]
+                },
+                {
+                    "name": "GET /analytics/stats (Financiero, Admin Only)",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/analytics/stats?locationId={{locationId}}"
+                    },
+                    "response": [
+                        {
+                            "name": "200 - Estadísticas Financieras",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"success\": true,\n  \"data\": {\n    \"locationName\": \"HQ El Poblado\",\n    \"totalRevenue\": 1450000,\n    \"totalEntries\": 89,\n    \"averageDurationHours\": 2.75\n  }\n}",
+                            "_postman_previewlanguage": "json"
+                        }
+                    ]
+                },
+                {
+                    "name": "GET /analytics/first-timers (Primera Visita)",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/analytics/first-timers"
+                    },
+                    "response": [
+                        {
+                            "name": "200 - Nuevas Personas",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"success\": true,\n  \"data\": [\n    { \"document\": \"CC-XXXX5678\", \"name\": \"Juan Pérez\", \"firstEntry\": \"2026-03-04T09:00:00.000Z\" }\n  ]\n}",
+                            "_postman_previewlanguage": "json"
+                        }
+                    ]
+                },
+                {
+                    "name": "GET /analytics/operator-revenue (Mi Facturación)",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/analytics/operator-revenue",
+                        "description": "Email extraído del JWT. Retorna solo checkouts COMPLETED del usuario autenticado."
+                    },
+                    "response": [
+                        {
+                            "name": "200 - Revenue por Período",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"success\": true,\n  \"data\": {\n    \"today\": 54000,\n    \"week\": 312000,\n    \"month\": 1456000,\n    \"year\": 8900000\n  }\n}",
+                            "_postman_previewlanguage": "json"
+                        }
+                    ]
+                },
+                {
+                    "name": "GET /analytics/top-operators (Podio Semanal, Admin Only)",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/analytics/top-operators"
+                    },
+                    "response": [
+                        {
+                            "name": "200 - Top 3 Operadores",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"success\": true,\n  \"data\": [\n    { \"_id\": \"carlos.villa@coworking.co\", \"totalRevenue\": 312000 },\n    { \"_id\": \"ana.gomez@coworking.co\", \"totalRevenue\": 278000 },\n    { \"_id\": \"diana.salazar@coworking.co\", \"totalRevenue\": 245000 }\n  ]\n}",
+                            "_postman_previewlanguage": "json"
+                        }
+                    ]
+                },
+                {
+                    "name": "GET /analytics/top-locations (Sedes Semana, Admin Only)",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/analytics/top-locations"
+                    },
+                    "response": [
+                        {
+                            "name": "200 - Top 3 Sedes",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"success\": true,\n  \"data\": [\n    { \"locationName\": \"HQ El Poblado\", \"totalRevenue\": 890000 },\n    { \"locationName\": \"Coworking Laureles\", \"totalRevenue\": 560000 },\n    { \"locationName\": \"Sede Centro\", \"totalRevenue\": 430000 }\n  ]\n}",
+                            "_postman_previewlanguage": "json"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

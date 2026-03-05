@@ -1,0 +1,65 @@
+services:
+  api:
+    build: ./coworking-api
+    container_name: coworking-api
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - MONGO_URI=mongodb://admin:password123@mongodb:27017/coworking?authSource=admin
+      - DRAGONFLY_HOST=dragonfly
+      - DRAGONFLY_PORT=6379
+      - DRAGONFLY_PASSWORD=secure_dragonfly_audit_pwd_2026
+      - JWT_SECRET=super_secret_audit_safe_key_32_chars_min
+      - SESSION_EXPIRATION=6h
+      - NOTIFICATION_SERVICE_URL=http://notification-service:3001/email
+    volumes:
+      - ./coworking-api:/usr/src/app
+    depends_on:
+      - mongodb
+      - dragonfly
+      - notification-service
+    networks:
+      - coworking-network
+
+  notification-service:
+    build: ./notification-microservice
+    container_name: coworking-notification
+    volumes:
+      - ./notification-microservice:/usr/src/app
+    ports:
+      - "3001:3001"
+    networks:
+      - coworking-network
+
+  mongodb:
+    image: mongo:latest
+    container_name: coworking-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password123
+    networks:
+      - coworking-network
+
+  dragonfly:
+    image: 'docker.dragonflydb.io/dragonflydb/dragonfly'
+    container_name: coworking-dragonfly
+    command: [ "--requirepass=secure_dragonfly_audit_pwd_2026" ]
+    ports:
+      - "6379:6379"
+    ulimits:
+      memlock: -1
+    networks:
+      - coworking-network
+
+networks:
+  coworking-network:
+    driver: bridge
+
+volumes:
+  mongo_data:
